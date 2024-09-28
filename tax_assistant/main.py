@@ -1,12 +1,15 @@
+import os
 from copy import deepcopy
 from typing import List, Optional, Type, Any, Tuple, Literal, TypeVar
 
 import instructor
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile
+from fastapi.params import File
 from openai import OpenAI
 from pydantic import BaseModel, create_model
 from pydantic.fields import FieldInfo
+from starlette.responses import JSONResponse
 
 from tax_assistant.models.partial_taxform import PartialDeklaracja
 
@@ -266,6 +269,34 @@ async def process_pcc3(req: Request):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/transcribe/")
+async def transcribe_audio(file: UploadFile = File(...)):
+    try:
+        # Save the uploaded file to a temporary location
+        temp_file_path = f"./temp/{file.filename}"
+        os.makedirs(os.path.dirname(temp_file_path), exist_ok=True)
+
+        with open(temp_file_path, "wb") as f:
+            content = await file.read()
+            f.write(content)
+
+        # Call the OpenAI Whisper API
+        with open(temp_file_path, "rb") as audio_file:
+            response = OpenAI().audio.transcriptions.create(
+                model="whisper-1",
+                file=audio_file,
+                response_format="text",
+                language="pl",
+            )
+
+        # Clean up the temporary file
+        os.remove(temp_file_path)
+
+        return JSONResponse(content={"transcription": response})
+
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
 if __name__ == "__main__":
