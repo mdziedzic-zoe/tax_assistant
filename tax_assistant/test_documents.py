@@ -45,3 +45,12 @@ async def analyze_document(
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+# Example request:
+#
+# curl -X 'POST' \
+#   'http://localhost:8000/analyze-document' \
+#   -H 'accept: application/json' \
+#   -H 'Content-Type: multipart/form-data' \
+#   -F 'file=@umowa.pdf;type=application/pdf' \
+#   -F 'prompt=Analyze the document. Give me all key information. Don'\''t mess up numbers.'
