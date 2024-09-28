@@ -7,11 +7,13 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.params import File
 from openai import OpenAI
-from pydantic import BaseModel, create_model
+from pydantic import BaseModel, create_model, ValidationError
 from pydantic.fields import FieldInfo
+from sqlalchemy.orm.sync import update
 from starlette.responses import JSONResponse
 
 from tax_assistant.models.partial_taxform import PartialDeklaracja
+from tax_assistant.models.taxform import Deklaracja
 
 load_dotenv()
 client = instructor.from_openai(OpenAI())
@@ -24,12 +26,14 @@ class Message(BaseModel):
 
 
 class Request(BaseModel):
+    conv_id: str
     messages: List[Message]
+    declaration: PartialDeklaracja
 
 
 class Response(BaseModel):
     response: str
-    partial: PartialDeklaracja
+    declaration: PartialDeklaracja
 
 
 system_prompt = """
@@ -249,26 +253,64 @@ system_prompt = """
          Respond with data most sensible to the users latest query.
          Analyse past conversation and extract data relevant to the data model. Ensure that validation constraints are met.
          When validation constraints are not met, highlight this in the user message.
+         Be proactive and try to drive the conversation. Whenever returning an answer, ask the user to provide further information to complete the tax statement. Narrow the required data to at most 3 properties. 
     </tasks>     
     """
 
+db = {}
 
-@app.post("/process_pcc3")
-async def process_pcc3(req: Request):
+
+def merge(dict1, dict2):
+    return {
+        key: dict2.get(key, dict1.get(key))
+        if dict2.get(key) is not None
+        else dict1.get(key)
+        for key in set(dict1) | set(dict2)
+    }
+
+
+@app.post("/chat")
+async def answer_chat(req: Request):
     try:
         messages = [Message(role="system", content=system_prompt)] + req.messages
-        print(messages)
+
+        be_model = db[req.conv_id]
+        fe_model = req.declaration
+
+        model = merge(be_model, fe_model)
+
         response = client.chat.completions.create(
-            # model="gpt-4o",
-            model="gpt-3.5-turbo",
+            model="gpt-4o",
+            # model="gpt-3.5-turbo",
             messages=messages,
             response_model=Response
         )
-        print(response)
-        return response
+
+        db[req.conv_id] = merge(model, response.declaration)
+
+        # print(response)
+        # print("####-----####-----####-----####-----")
+        # json = response.declaration.model_dump_json()
+        # print(json)
+
+        #
+        # error = None
+        # try:
+        #     v = Deklaracja.model_validate_json(json)
+        #     print(v.model_dump_json())
+        # except ValidationError as e:
+        #     error = e.errors()[0]
+        #
+        # if error:
+
+        return Response(
+            response=response.response,
+            declaration=db[req.conv_id]
+        )
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/transcribe/")
 async def transcribe_audio(file: UploadFile = File(...)):
@@ -301,5 +343,6 @@ async def transcribe_audio(file: UploadFile = File(...)):
 
 if __name__ == "__main__":
     import uvicorn
+
     print("running")
     uvicorn.run(app, host="0.0.0.0", port=8000)
