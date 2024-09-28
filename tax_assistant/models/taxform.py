@@ -6,6 +6,8 @@ from datetime import date
 from enum import Enum
 import re
 
+from tax_assistant.models.partial_taxform import TaxOffice
+
 
 class OptionalModel(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -72,7 +74,7 @@ class SectionA(OptionalModel):
     wariant_formularza: Literal[6] = 6
     cel_zlozenia: Annotated[CelZlozenia, form_field("P_6")]
     data_dokonania_czynnosci: Annotated[date, form_field("P_4")]
-    kod_urzedu: Annotated[str, form_field("P_5")]
+    kod_urzedu: Annotated[TaxOffice, form_field("P_5")]
 
     @validator('data_dokonania_czynnosci')
     def validate_date(cls, v):

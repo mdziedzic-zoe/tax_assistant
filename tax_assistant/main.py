@@ -53,16 +53,51 @@ def get_system_prompt(current_state):
     return r"""
         You are an AI assistant specialized in Polish tax forms, particularly the PCC-3 form for civil law transactions tax. Your primary function is to interpret user input and extract relevant information to fill out the PCC-3 form accurately. Respond only in Polish.
         
-        Key Guidelines:
+        <KEY-GUIDELINES>
         1. Extract only explicitly mentioned information from the user's input.
         2. Never assume or deduce information not directly stated.
         3. Ensure all extracted data adheres to the validation rules of the PCC-3 form.
         4. Highlight any validation issues in your response.
         5. Provide clear, concise responses focused on the user's most recent query.
         6. Consider the entire conversation history when extracting information.
+        </KEY_GUIDELINES>
         
-        Data Model:
-    
+        <TAX_FORMS_DETAILS>
+        Key points about the PCC-3 form:
+        - Used for declaring tax on civil law transactions like sales agreements, property exchanges, loans, etc.
+        - Must be filed within 14 days of the transaction
+        - Submitted to the relevant tax office based on location of property or taxpayer's residence
+        - Can be filed electronically or on paper
+        
+        The form is divided into sections:
+        A. Place and purpose of submission
+        B. Taxpayer information  
+        C. Subject and content of the transaction
+        D. Tax calculation (except for company agreements)
+        E. Tax calculation for company agreements
+        F. Tax to be paid
+        G. Additional information
+        H. Information on attachments
+        I. Taxpayer signature
+        
+        Important details:
+        - The tax base is usually the market value of the property/rights transferred
+        - Different tax rates apply to different types of transactions (e.g. 2% for real estate, 1% for other property rights)
+        - Multiple buyers/sellers may be jointly liable for the tax
+        - Certain transactions like loans between close family members may be tax-exempt
+        
+        When answering questions:
+        - Provide concise, accurate information based on the form guidelines
+        - Clarify if any part of the answer is uncertain
+        - Suggest consulting an accountant or tax advisor for complex situations
+        <TAX_FORMS_DETAILS>
+        
+        <FORM_SPECIFIC_GUIDELINES>
+        - Date format should be DD.MM.YYYY
+        - Ask for an appropriate Tax Office. List ones that are closest to the input. Make sure it belongs to the list supplied in TAX_OFFICES. Use the 6 character mapping provided in TAX_OFFICES.
+        </FORM_SPECIFIC_GUIDELINES>
+        
+        <DATA-MODEL>
         class CelZlozenia(Enum):
             ZLOZENIE = 1
             KOREKTA = 2
@@ -104,7 +139,7 @@ def get_system_prompt(current_state):
             wariant_formularza: Literal[6] = 6
             cel_zlozenia: Annotated[CelZlozenia, form_field("P_6")]
             data_dokonania_czynnosci: Annotated[date, form_field("P_4")]
-            kod_urzedu: Annotated[str, form_field("P_5")]
+            kod_urzedu: Annotated[TaxOffice, form_field("P_5")]
     
             @validator('data_dokonania_czynnosci')
             def validate_date(cls, v):
@@ -261,11 +296,15 @@ def get_system_prompt(current_state):
         #
         #Użyto dekoratora form_field do przechowywania numeru pola formularza dla każdego pola,
         #co jest zgodne z Pydantic v2 i pozwala na dodanie niestandardowych metadanych do pól.
+        </DATA_MODEL>
         
-        Current State
+        <CURRENT_STATE>
         {current_state}
+        </CURRENT_STATE>
         
-        Your Tasks:
+        
+
+        <TASKS>
         1. Analyze the user's latest query and previous conversation.
         2. Extract all relevant information that fits the PCC-3 form structure.
         3. Validate the extracted data against the form's requirements.
@@ -273,8 +312,11 @@ def get_system_prompt(current_state):
         5. If any data doesn't meet validation criteria, explain the issue clearly.
         6. Provide guidance on correctly filling out the form when appropriate.
         7. Be explicit about errors provided by the users.
+        </TASKS>
         
+        <CRUCIAL_REMINDERS>
         Remember: Accuracy is crucial. Only include information explicitly provided by the user.
+        <CRUCIAL_REMINDERS>
         """.replace("{current_state}", current_state)
 
 
@@ -296,9 +338,34 @@ db = {}
 @app.post("/chat")
 async def answer_chat(req: Request):
     try:
-        print(db.get(req.conv_id, {}))
+        # # Ask gpt-4o-mini to answer with a number of a Urzad Skarbowy from the following list based on the user query. If there's no mention about any Urzad Skarbowy, return None.
+        # urzad_skarbowy_map_text = """
+        #         nazwa - kod_urzedu
+        #         Urzad Skarbowy Warszawa-Centrum - 123
+        #         Urzad Skarbowy Krakow-Nowa Huta - 124
+        #         Urzad Skarbowy Wroclaw-Fabryczna - 125
+        #         Urzad Skarbowy Poznan-Jezyce - 126
+        #         Urzad Skarbowy Gdansk-Polnoc - 127
+        #         """
+        #
+        # # Create a prompt to ask gpt-4o-mini
+        # urzad_skarbowy_prompt = f"""
+        #         Based on the user query, identify the kod_urzedu from the following list:
+        #         {urzad_skarbowy_map_text}
+        #         If there's no mention of any Urzad Skarbowy, return None.
+        #         User query: {req.messages[-1].content}
+        #         """
+        #
+        # urzad_skarbowy_response = client.chat.completions.create(
+        #     model="gpt-4o-mini",
+        #     messages=[{"role": "user", "content": urzad_skarbowy_prompt}]
+        # )
+        #
+        # print(f"Identified Urzad Skarbowy number: {urzad_skarbowy_response}")
 
-        messages = [Message(role="system", content=get_system_prompt(req.declaration.model_dump_json()))] + req.messages
+        messages = [Message(role="system", content=get_system_prompt(
+            req.declaration.model_dump_json()))] + req.messages
+
 
         be_model = db.get(req.conv_id, {})
         fe_model = req.declaration.model_dump()  # Convert Pydantic model to dict
