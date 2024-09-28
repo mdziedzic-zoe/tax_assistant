@@ -1,8 +1,27 @@
-from pydantic import BaseModel, Field, constr, validator
-from typing import Optional, Any, Dict, Annotated, Literal
+from types import UnionType
+
+from pydantic import BaseModel, Field, constr, validator, ConfigDict
+from typing import Optional, Any, Dict, Annotated, Literal, get_origin, get_args
 from datetime import date
 from enum import Enum
 import re
+
+
+class OptionalModel(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+
+        for field_name, field in cls.model_fields.items():
+            if field.annotation is not None:
+                # Check if the field is already Optional
+                if get_origin(field.annotation) is UnionType and type(None) in get_args(field.annotation):
+                    continue
+
+                # Make the field optional
+                field.annotation = Annotated[field.annotation | None, field.annotation]
+                field.default = None
 
 
 def form_field(form_field_number: str):
@@ -47,7 +66,7 @@ class PodstawaOpodatkowania(Enum):
     PRZENIESIENIE_SIEDZIBY = 8
 
 
-class SectionA(BaseModel):
+class SectionA(OptionalModel):
     """Sekcja A: Nagłówek deklaracji"""
     kod_formularza: Literal["PCC-3"] = "PCC-3"
     wariant_formularza: Literal[6] = 6
@@ -61,7 +80,7 @@ class SectionA(BaseModel):
             raise ValueError('Data musi być nie wcześniejsza niż 1 stycznia 2024')
         return v
 
-class Adres(BaseModel):
+class Adres(OptionalModel):
     kod_kraju: Annotated[str, form_field("P_8")]
     wojewodztwo: Annotated[Optional[str], form_field("P_9")] = Field(None, min_length=1, max_length=36)
     powiat: Annotated[Optional[str], form_field("P_10")] = Field(None, min_length=1, max_length=36)
@@ -78,7 +97,7 @@ class Adres(BaseModel):
             raise ValueError('Nieprawidłowy format kodu pocztowego')
         return v
 
-class OsobaFizyczna(BaseModel):
+class OsobaFizyczna(OptionalModel):
     nip: Annotated[Optional[str], form_field("P_17")] = None
     pesel: Annotated[Optional[str], form_field("P_18")] = None
     imie_pierwsze: Annotated[str, form_field("P_19")] = Field(..., min_length=1, max_length=30)
@@ -99,7 +118,7 @@ class OsobaFizyczna(BaseModel):
             raise ValueError('Nieprawidłowy format PESEL')
         return v
 
-class OsobaNiefizyczna(BaseModel):
+class OsobaNiefizyczna(OptionalModel):
     nip: Annotated[str, form_field("P_24")]
     pelna_nazwa: Annotated[str, form_field("P_25")] = Field(..., min_length=1, max_length=240)
     skrocona_nazwa: Annotated[str, form_field("P_26")] = Field(..., min_length=1, max_length=70)
@@ -110,21 +129,21 @@ class OsobaNiefizyczna(BaseModel):
             raise ValueError('Nieprawidłowy format NIP')
         return v
 
-class SectionB(BaseModel):
+class SectionB(OptionalModel):
     """Sekcja B: Dane podatnika"""
     osoba_fizyczna: Optional[OsobaFizyczna] = None
     osoba_niefizyczna: Optional[OsobaNiefizyczna] = None
     adres_zamieszkania_siedziby: Adres
     podmiot_skladajacy: Annotated[PodmiotSkladajacy, form_field("P_7")]
 
-class SectionC(BaseModel):
+class SectionC(OptionalModel):
     """Sekcja C: Przedmiot opodatkowania i treść czynności cywilnoprawnej"""
     przedmiot_opodatkowania: Annotated[PrzedmiotOpodatkowania, form_field("P_20")]
     miejsce_polozenia: Annotated[Optional[MiejscePolozenia], form_field("P_21")] = None
     miejsce_dokonania_czynnosci: Annotated[Optional[MiejscePolozenia], form_field("P_22")] = None
     tresc_czynnosci: Annotated[constr(max_length=2000), form_field("P_23")]
 
-class SectionD(BaseModel):
+class SectionD(OptionalModel):
     """Sekcja D: Obliczenie należnego podatku od czynności cywilnoprawnych, z wyjątkiem umowy spółki lub jej zmiany"""
     podstawa_opodatkowania_1: Annotated[Optional[int], form_field("P_24")] = Field(None, ge=0)
     kwota_podatku_1: Annotated[Optional[int], form_field("P_25")] = Field(None, ge=0)
@@ -151,7 +170,7 @@ class SectionD(BaseModel):
     kwota_podatku_inna: Annotated[Optional[int], form_field("P_45")] = Field(None, ge=0)
     kwota_podatku_naleznego: Annotated[Optional[int], form_field("P_46")] = Field(None, ge=0)
 
-class SectionE(BaseModel):
+class SectionE(OptionalModel):
     """Sekcja E: Obliczenie należnego podatku od umowy spółki / zmiany umowy spółki"""
     typ_spolki: Annotated[Optional[TypSpolki], form_field("P_47")] = None
     podstawa_opodatkowania: Annotated[Optional[PodstawaOpodatkowania], form_field("P_48")] = None
@@ -160,11 +179,11 @@ class SectionE(BaseModel):
     podstawa_obliczenia_podatku: Annotated[Optional[float], form_field("P_51")] = Field(None, ge=0)
     kwota_podatku: Annotated[Optional[int], form_field("P_52")] = Field(None, ge=0)
 
-class SectionF(BaseModel):
+class SectionF(OptionalModel):
     """Sekcja F: Podatek do zapłaty"""
     kwota_podatku_do_zaplaty: Annotated[int, form_field("P_53")] = Field(..., ge=0)
 
-class SectionG(BaseModel):
+class SectionG(OptionalModel):
     """Sekcja G: Informacje dodatkowe"""
     wojewodztwo: Annotated[Optional[str], form_field("P_54")] = Field(None, min_length=1, max_length=36)
     powiat: Annotated[Optional[str], form_field("P_55")] = Field(None, min_length=1, max_length=36)
@@ -181,11 +200,11 @@ class SectionG(BaseModel):
             raise ValueError('Nieprawidłowy format kodu pocztowego')
         return v
 
-class SectionH(BaseModel):
+class SectionH(OptionalModel):
     """Sekcja H: Informacja o załącznikach"""
     liczba_zalacznikow: Annotated[Optional[int], form_field("P_62")] = Field(None, ge=0)
 
-class Deklaracja(BaseModel):
+class Deklaracja(OptionalModel):
     sekcja_a: SectionA
     sekcja_b: SectionB
     sekcja_c: SectionC
