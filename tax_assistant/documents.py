@@ -38,7 +38,7 @@ def analyze_document_with_gpt4(file_path, prompt):
                 { "file_id": file_id, "tools": [{"type": "file_search"}] }
             ]
         )
-
+        
         # Run the assistant
         run = client.beta.threads.runs.create(
             thread_id=thread.id,

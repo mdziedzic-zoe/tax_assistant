@@ -14,9 +14,9 @@ import uuid
 
 @app.post("/analyze-document")
 async def analyze_document(
-    file: UploadFile = File(...),
-    prompt: str = Form(...)
+    file: UploadFile = File(...)
 ):
+    prompt = "Analyze the document. Give me all key information. Don't mess up numbers. Answer in Polish."
     try:
         # Generate a random UUID and prepend it to the filename
         unique_filename = f"{uuid.uuid4()}_{file.filename}"
