@@ -1,8 +1,10 @@
 import os
+import logging
 from copy import deepcopy
 from typing import List, Optional, Type, Any, Tuple, Literal, TypeVar
 
 import instructor
+import uuid
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.params import File
@@ -13,8 +15,14 @@ from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
 
 from tax_assistant.models.partial_taxform import PartialDeklaracja
+from tax_assistant.documents import process_document
 
 load_dotenv()
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 client = instructor.from_openai(OpenAI())
 app = FastAPI()
 
@@ -40,7 +48,7 @@ class Response(BaseModel):
     partial: PartialDeklaracja
 
 
-system_prompt = """
+system_prompt = r"""
     <mission>
         You are an expert in interpreting user input and extracting it into a structured data output. Your main focus is
          to be correct and never assume or deduce any information that were not explicitly mentioned in the conversation 
@@ -306,6 +314,35 @@ async def transcribe_audio(file: UploadFile = File(...)):
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
+@app.post("/analyze-document")
+async def analyze_document(
+    file: UploadFile = File(...)
+):
+    prompt = "Analyze the document. Give me all key information. Don't mess up numbers. Answer in Polish."
+    try:
+        # Generate a random UUID and prepend it to the filename
+        unique_filename = f"{uuid.uuid4()}_{file.filename}"
+        temp_file_path = f"./temp/{unique_filename}"
+        os.makedirs(os.path.dirname(temp_file_path), exist_ok=True)
+
+        with open(temp_file_path, "wb") as f:
+            content = await file.read()
+            f.write(content)
+        
+        logger.info(f"Received file: {unique_filename}")
+        logger.info(f"Prompt: {prompt}")
+        
+        analysis = process_document(temp_file_path, prompt)
+        
+        if analysis:
+            logger.info("Document analysis successful")
+            return {"analysis": analysis}
+        else:
+            logger.error("Failed to analyze the document")
+            raise HTTPException(status_code=500, detail="Failed to analyze the document")
+    except Exception as e:
+        logger.error(f"An error occurred: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
