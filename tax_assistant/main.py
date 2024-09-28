@@ -256,7 +256,8 @@ async def process_pcc3(req: Request):
         messages = [Message(role="system", content=system_prompt)] + req.messages
         print(messages)
         response = client.chat.completions.create(
-            model="gpt-4o",
+            # model="gpt-4o",
+            model="gpt-3.5-turbo",
             messages=messages,
             response_model=Response
         )
