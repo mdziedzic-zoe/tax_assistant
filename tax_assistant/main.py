@@ -9,6 +9,7 @@ from fastapi.params import File
 from openai import OpenAI
 from pydantic import BaseModel, create_model
 from pydantic.fields import FieldInfo
+from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
 
 from tax_assistant.models.partial_taxform import PartialDeklaracja
@@ -17,6 +18,13 @@ load_dotenv()
 client = instructor.from_openai(OpenAI())
 app = FastAPI()
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 class Message(BaseModel):
     role: str
