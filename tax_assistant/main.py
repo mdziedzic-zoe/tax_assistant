@@ -10,13 +10,15 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.params import File
 from openai import OpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
 
 from tax_assistant.documents import process_document
 from tax_assistant.models.grounding import brochure, circumstances
 from tax_assistant.models.partial_taxform import PartialDeklaracja
+from tax_assistant.models.taxform import Deklaracja
+from tax_assistant.xml_gen import generate_xml
 
 load_dotenv()
 
@@ -50,6 +52,7 @@ class Request(BaseModel):
 class Response(BaseModel):
     response: str
     declaration: PartialDeklaracja
+    generated_xml: str | None = None
 
 
 def get_system_prompt(current_state):
@@ -91,6 +94,8 @@ You are an AI assistant specialized in Polish tax forms, particularly the PCC-3 
 6. Provide guidance on correctly filling out the form when appropriate.
 7. Be explicit about errors provided by the users.
 8. Set is_completed field inside each sekcja ONLY if all the required fields for xml generation inside given sekcja are filled!!!
+9. In SectionB double check that podmiot has been correctly assigned.
+10. In SectionD double check that podmiot 
 "
 </TASKS>
 
@@ -142,6 +147,19 @@ def merge(dict1, dict2):
     return result
 
 
+def are_all_sections_complete(merged):
+    required_sections = ['sekcja_a', 'sekcja_b', 'sekcja_c', 'sekcja_d']
+    if not merged:
+        return False
+    for section in required_sections:
+        if section not in merged or merged[section] is None or 'is_complete' not in merged[section]:
+            return False
+        if not merged[section]['is_complete']:
+            return False
+
+    return True
+
+
 db = {}
 messages_db = {}
 
@@ -151,12 +169,12 @@ async def answer_chat(req: Request):
     messages_db[req.conv_id] = messages_db.get(req.conv_id, [])
 
     # different case for initial round
-    if len(messages_db[req.conv_id]) == 0:
-        print("init prompt")
-        system_prompt = get_init_system_prompt()
-    else:
-        system_prompt = get_system_prompt(req.declaration.model_dump_json())
+    # if len(messages_db[req.conv_id]) == 0:
+    #     print("init prompt")
+    #     system_prompt = get_init_system_prompt()
+    # else:
 
+    system_prompt = get_system_prompt(req.declaration.model_dump_json())
     messages_db[req.conv_id].extend(req.messages)
 
     try:
@@ -176,13 +194,32 @@ async def answer_chat(req: Request):
         messages_db[req.conv_id].append(Message(role="assistant", content=response.response))
 
         print(messages_db[req.conv_id])
-        try:
-            # Merge and store as dict
-            db[req.conv_id] = merge(model, response.declaration.model_dump())
-        except Exception as e:
-            print(e)
 
-        print(db.get(req.conv_id, {}))
+        # Merge and store as dict
+        merged = merge(model, response.declaration.model_dump())
+        db[req.conv_id] = merged
+
+        if are_all_sections_complete(merged):
+            try:
+                d = Deklaracja.model_validate(db[req.conv_id])
+                xml = generate_xml(d)
+                return Response(
+                    response=response.response,
+                    declaration=db[req.conv_id],
+                    generated_xml=xml
+                )
+
+            except ValidationError as ve:
+                print(ve)
+                for e in ve.errors():
+                    print(e)
+
+                response = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=messages + Message(role="user",
+                                                content=f"There are some errors in the provided final configuration. Ask the user to fill in the data to address them. Here are the issues: {"\n".join(ve.errors()[:3])}"),
+                    response_model=Response
+                )
 
         return Response(
             response=response.response,

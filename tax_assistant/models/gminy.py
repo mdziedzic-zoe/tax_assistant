@@ -1,5 +1,22 @@
 from enum import Enum
 
+import jellyfish
+
+
+def find_most_similar(target, string_array):
+    if not string_array:
+        return None
+
+    max_similarity = -1
+    most_similar = None
+
+    for s in string_array:
+        similarity = jellyfish.jaro_winkler_similarity(target, s)
+        if similarity > max_similarity:
+            max_similarity = similarity
+            most_similar = s
+
+    return most_similar
 
 class Voivodeship(str, Enum):
     DOLNOŚLĄSKIE = "DOLNOŚLĄSKIE"

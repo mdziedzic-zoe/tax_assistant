@@ -40,7 +40,7 @@ class CelZlozenia(Enum):
     KOREKTA = "KOREKTA"
 
 
-class PodmiotSkladajacy(Enum):
+class Podmiot(Enum):
     PODMIOT_ZOBOWIAZANY = "PODMIOT_ZOBOWIAZANY"
     STRONA_UMOWY_ZAMIANY = "STRONA_UMOWY_ZAMIANY"
     WSPOLNIK_SPOLKI_CYWILNEJ = "WSPOLNIK_SPOLKI_CYWILNEJ"
@@ -80,7 +80,7 @@ class SectionA(OptionalModel):
     """Sekcja A: Nagłówek deklaracji"""
     kod_formularza: Literal["PCC-3"] = "PCC-3"
     wariant_formularza: Literal[6] = 6
-    cel_zlozenia: Annotated[CelZlozenia, form_field("P_6")]
+    cel_zlozenia: Annotated[str, form_field("P_6")]
     data_dokonania_czynnosci: Annotated[date, form_field("P_4")]
     nazwa_urzedu: Annotated[TaxOffice, form_field("P_5")]
     is_complete: Optional[bool]
@@ -93,10 +93,10 @@ class SectionA(OptionalModel):
 
 
 class Adres(OptionalModel):
-    kod_kraju: Literal["POLSKA"] = "POLSKA"
-    wojewodztwo: Annotated[Optional[Voivodeship], form_field("P_9")] = Field(None, min_length=1, max_length=36)
-    powiat: Annotated[Optional[County], form_field("P_10")] = Field(None, min_length=1, max_length=36)
-    gmina: Annotated[Optional[Municipality], form_field("P_11")] = Field(None, min_length=1, max_length=36)
+    kod_kraju: Literal["PL"] = "PL"
+    wojewodztwo: Annotated[Optional[str], form_field("P_9")] = Field(None, min_length=1, max_length=36)
+    powiat: Annotated[Optional[str], form_field("P_10")] = Field(None, min_length=1, max_length=36)
+    gmina: Annotated[Optional[str], form_field("P_11")] = Field(None, min_length=1, max_length=36)
     ulica: Annotated[Optional[str], form_field("P_12")] = Field(None, min_length=1, max_length=65)
     nr_domu: Annotated[str, form_field("P_13")] = Field(..., min_length=1, max_length=9)
     nr_lokalu: Annotated[Optional[str], form_field("P_14")] = Field(None, min_length=1, max_length=10)
@@ -149,15 +149,15 @@ class SectionB(OptionalModel):
     osoba_fizyczna: Optional[OsobaFizyczna] = None
     osoba_niefizyczna: Optional[OsobaNiefizyczna] = None
     adres_zamieszkania_siedziby: Adres
-    podmiot_skladajacy: Annotated[PodmiotSkladajacy, form_field("P_7")]
+    podmiot: Annotated[str, form_field("P_7")]
     is_complete: Optional[bool]
 
 
 class SectionC(OptionalModel):
     """Sekcja C: Przedmiot opodatkowania i treść czynności cywilnoprawnej"""
-    przedmiot_opodatkowania: Annotated[PrzedmiotOpodatkowania, form_field("P_20")]
-    miejsce_polozenia: Annotated[Optional[MiejscePolozenia], form_field("P_21")] = None
-    miejsce_dokonania_czynnosci: Annotated[Optional[MiejscePolozenia], form_field("P_22")] = None
+    przedmiot_opodatkowania: Annotated[str, form_field("P_20")]
+    miejsce_polozenia: Annotated[Optional[str], form_field("P_21")] = None
+    miejsce_dokonania_czynnosci: Annotated[Optional[str], form_field("P_22")] = None
     tresc_czynnosci: Annotated[constr(max_length=2000), form_field("P_23")]
     is_complete: Optional[bool]
 
@@ -217,7 +217,7 @@ class Deklaracja(OptionalModel):
     sekcja_b: SectionB
     sekcja_c: SectionC
     sekcja_d: SectionD
-    sekcja_e: SectionE
+    sekcja_e: Optional[SectionE]
     sekcja_f: SectionF
     sekcja_g: Optional[SectionG] = None
     sekcja_h: Optional[SectionH] = None
