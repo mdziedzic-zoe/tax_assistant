@@ -85,3 +85,7 @@ tax_assistant\__pycache__
 tax_assistant/__pycache__/__init__.cpython-312.pyc
 tax_assistant/models/__pycache__/__init__.cpython-312.pyc
 temp/
+
+# Poetry
+poetry.lock
+.poetry/
