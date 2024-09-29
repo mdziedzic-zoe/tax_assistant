@@ -166,7 +166,7 @@ db = {}
 messages_db = {}
 
 
-@app.post("/chat")
+@app.post("/api/chat")
 async def answer_chat(req: Request):
     messages_db[req.conv_id] = messages_db.get(req.conv_id, [])
     system_prompt = get_system_prompt(req.declaration.model_dump_json())
@@ -228,7 +228,7 @@ async def answer_chat(req: Request):
         raise HTTPException(status_code=500, detail=e)
 
 
-@app.post("/transcribe/")
+@app.post("/api/transcribe/")
 async def transcribe_audio(file: UploadFile = File(...)):
     try:
         # Save the uploaded file to a temporary location
@@ -257,7 +257,7 @@ async def transcribe_audio(file: UploadFile = File(...)):
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
-@app.post("/analyze-document")
+@app.post("/api/analyze-document")
 async def analyze_document(
         file: UploadFile = File(...)
 ):
@@ -292,7 +292,7 @@ if __name__ == "__main__":
     import uvicorn
 
     print("running")
-    uvicorn.run(app, host="0.0.0.0", port=9999)
+    uvicorn.run(app, host="0.0.0.0", port=8000)
 
 # # Ask gpt-4o-mini to answer with a number of a Urzad Skarbowy from the following list based on the user query. If there's no mention about any Urzad Skarbowy, return None.
 # urzad_skarbowy_map_text = """
