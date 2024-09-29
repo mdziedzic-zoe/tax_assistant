@@ -1,0 +1,60 @@
+<Deklaracja>
+  <Naglowek>
+    <KodFormularza>PCC-3</KodFormularza>
+    <WariantFormularza>6</WariantFormularza>
+    <CelZlozenia poz="P_6">1</CelZlozenia>
+    <Data poz="P_4">2024-03-15</Data>
+    <KodUrzedu>1206</KodUrzedu>
+  </Naglowek>
+  <Podmiot1 rola="Podatnik">
+    <OsobaFizyczna>
+      <NIP>5130267603</NIP>
+      <ImiePierwsze>Jan</ImiePierwsze>
+      <Nazwisko>Kowalski</Nazwisko>
+      <DataUrodzenia>1980-05-15</DataUrodzenia>
+      <ImieOjca>Adam</ImieOjca>
+      <ImieMatki>Ewa</ImieMatki>
+    </OsobaFizyczna>
+    <AdresZamieszkaniaSiedziby rodzajAdresu="RAD">
+      <AdresPol>
+        <KodKraju>PL</KodKraju>
+        <Wojewodztwo>mazowieckie</Wojewodztwo>
+        <Powiat>M. ST. WARSZAWA</Powiat>
+        <Gmina>M. ST. WARSZAWA</Gmina>
+        <Ulica>Marszałkowska</Ulica>
+        <NrDomu>1</NrDomu>
+        <NrLokalu>10</NrLokalu>
+        <Miejscowosc>Warszawa</Miejscowosc>
+        <KodPocztowy>00-001</KodPocztowy>
+      </AdresPol>
+    </AdresZamieszkaniaSiedziby>
+  </Podmiot1>
+  <PozycjeSzczegolowe>
+    <P_7>1</P_7>
+    <P_20>1</P_20>
+    <P_21>1</P_21>
+    <P_22>1</P_22>
+    <P_23>Zakup nieruchomości</P_23>
+    <P_24>500000</P_24>
+    <P_25>5000</P_25>
+    <P_46>5000</P_46>
+    <P_47>1</P_47>
+    <P_48>1</P_48>
+    <P_49>100000</P_49>
+    <P_50>1000.50</P_50>
+    <P_51>99000.50</P_51>
+    <P_52>990</P_52>
+    <P_53>5990</P_53>
+    <P_54>mazowieckie</P_54>
+    <P_55>M. ST. WARSZAWA</P_55>
+    <P_56>M. ST. WARSZAWA</P_56>
+    <P_57>Nowy Świat</P_57>
+    <P_58>1</P_58>
+    <P_59>1</P_59>
+    <P_60>Warszawa</P_60>
+    <P_61>00-001</P_61>
+    <P_62>1</P_62>
+  </PozycjeSzczegolowe>
+  <Pouczenia>1</Pouczenia>
+</Deklaracja>
+

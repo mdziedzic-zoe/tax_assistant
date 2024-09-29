@@ -6,22 +6,33 @@ from datetime import date
 from enum import Enum
 import re
 
+from tax_assistant.models.gminy import Municipality, County, Voivodeship
 
-class OptionalModel(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+from pydantic import BaseModel, field_validator, ValidationError
 
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
 
-        for field_name, field in cls.model_fields.items():
-            if field.annotation is not None:
-                # Check if the field is already Optional
-                if get_origin(field.annotation) is UnionType and type(None) in get_args(field.annotation):
-                    continue
+class ErrorSuppressingModel(BaseModel):
+    @classmethod
+    def model_validate(cls, obj):
+        fields = {}
+        for name, field in cls.model_fields.items():
+            try:
+                value = obj.get(name)
+                if value is not None:
+                    # Validate the field
+                    fields[name] = field.validate(value, {}, loc=name)
+                else:
+                    fields[name] = None
+            except ValidationError:
+                # If validation fails, set the field to None
+                fields[name] = None
 
-                # Make the field optional
-                field.annotation = Annotated[field.annotation | None, field.annotation]
-                field.default = None
+        # Create and return the model instance
+        return cls(**fields)
+
+    @field_validator('*', mode='after')
+    def validate_fields(cls, value, info):
+        return value  # This validator is just to trigger the custom model_validate method
 
 
 def form_field(form_field_number: str):
@@ -33,8 +44,9 @@ def form_field(form_field_number: str):
 
 
 class CelZlozenia(Enum):
-    ZLOZENIE = 1
-    KOREKTA = 2
+    ZLOZENIE = "ZLOZENIE"
+    KOREKTA = "KOREKTA"
+
 
 class TaxOffice(Enum):
     URZĄD_SKARBOWY_W_BOLESŁAWCU = "URZĄD_SKARBOWY_W_BOLESŁAWCU"
@@ -439,50 +451,50 @@ class TaxOffice(Enum):
     ZACHODNIOPOMORSKI_URZĄD_SKARBOWY_W_SZCZECINIE = "ZACHODNIOPOMORSKI_URZĄD_SKARBOWY_W_SZCZECINIE"
 
 
-
 class PodmiotSkladajacy(Enum):
-    PODMIOT_ZOBOWIAZANY = 1
-    STRONA_UMOWY_ZAMIANY = 2
-    WSPOLNIK_SPOLKI_CYWILNEJ = 3
-    POZYCZKOBIORCA = 4
-    INNY_PODMIOT = 5
+    PODMIOT_ZOBOWIAZANY = "PODMIOT_ZOBOWIAZANY"
+    STRONA_UMOWY_ZAMIANY = "STRONA_UMOWY_ZAMIANY"
+    WSPOLNIK_SPOLKI_CYWILNEJ = "WSPOLNIK_SPOLKI_CYWILNEJ"
+    POZYCZKOBIORCA = "POZYCZKOBIORCA"
+    INNY_PODMIOT = "INNY_PODMIOT"
 
 
 class PrzedmiotOpodatkowania(Enum):
-    UMOWA = 1
-    ZMIANA_UMOWY = 2
-    ORZECZENIE_SADU_LUB_UGODA = 3
-    INNE = 4
+    UMOWA = "UMOWA"
+    ZMIANA_UMOWY = "ZMIANA_UMOWY"
+    ORZECZENIE_SADU_LUB_UGODA = "ORZECZENIE_SADU_LUB_UGODA"
+    INNE = "INNE"
 
 
 class MiejscePolozenia(Enum):
-    TERYTORIUM_RP = 1
-    POZA_TERYTORIUM_RP = 2
+    TERYTORIUM_RP = "TERYTORIUM_RP"
+    POZA_TERYTORIUM_RP = "POZA_TERYTORIUM_RP"
 
 
 class TypSpolki(Enum):
-    OSOBOWA = 1
-    KAPITALOWA = 2
+    OSOBOWA = "OSOBOWA"
+    KAPITALOWA = "KAPITALOWA"
 
 
 class PodstawaOpodatkowania(Enum):
-    ZAWARCIE_UMOWY_SPOLKI = 1
-    ZWIEKSZENIE_MAJATKU_SPOLKI = 2
-    DOPLATA = 3
-    POZYCZKA_UDZIELONA_SPOLCE = 4
-    ODDANIE_RZECZY_DO_UZYWANIA = 5
-    PRZEKSZTALCENIE_SPOLEK = 6
-    LACZENIE_SPOLEK = 7
-    PRZENIESIENIE_SIEDZIBY = 8
+    ZAWARCIE_UMOWY_SPOLKI ="ZAWARCIE_UMOWY_SPOLKI"
+    ZWIEKSZENIE_MAJATKU_SPOLKI ="ZWIEKSZENIE_MAJATKU_SPOLKI"
+    DOPLATA ="DOPLATA"
+    POZYCZKA_UDZIELONA_SPOLCE ="POZYCZKA_UDZIELONA_SPOLCE"
+    ODDANIE_RZECZY_DO_UZYWANIA ="ODDANIE_RZECZY_DO_UZYWANIA"
+    PRZEKSZTALCENIE_SPOLEK ="PRZEKSZTALCENIE_SPOLEK"
+    LACZENIE_SPOLEK ="LACZENIE_SPOLEK"
+    PRZENIESIENIE_SIEDZIBY ="PRZENIESIENIE_SIEDZIBY"
 
 
-class PartialSectionA(OptionalModel):
+class PartialSectionA(ErrorSuppressingModel):
     """Sekcja A: Nagłówek deklaracji"""
     kod_formularza: Optional[Literal["PCC-3"]] = "PCC-3"
     wariant_formularza: Optional[Literal[6]] = 6
     cel_zlozenia: Optional[Annotated[CelZlozenia, form_field("P_6")]] = None
     data_dokonania_czynnosci: Optional[Annotated[date, form_field("P_4")]] = None
-    kod_urzedu: Optional[Annotated[TaxOffice, form_field("P_5")]] = None
+    nazwa_urzedu: Optional[Annotated[TaxOffice, form_field("P_5")]] = None
+    is_complete: Optional[bool]
 
     @validator('data_dokonania_czynnosci')
     def validate_date(cls, v):
@@ -491,11 +503,12 @@ class PartialSectionA(OptionalModel):
         return v
 
 
-class PartialAdres(OptionalModel):
+class PartialAdres(ErrorSuppressingModel):
     kod_kraju: Optional[Annotated[str, form_field("P_8")]] = None
-    wojewodztwo: Optional[Annotated[Optional[str], form_field("P_9")]] = Field(None, min_length=1, max_length=36)
-    powiat: Optional[Annotated[Optional[str], form_field("P_10")]] = Field(None, min_length=1, max_length=36)
-    gmina: Optional[Annotated[Optional[str], form_field("P_11")]] = Field(None, min_length=1, max_length=36)
+    wojewodztwo: Optional[Annotated[Optional[Voivodeship], form_field("P_9")]] = Field(None, min_length=1,
+                                                                                       max_length=36)
+    powiat: Optional[Annotated[Optional[County], form_field("P_10")]] = Field(None, min_length=1, max_length=36)
+    gmina: Optional[Annotated[Optional[Municipality], form_field("P_11")]] = Field(None, min_length=1, max_length=36)
     ulica: Optional[Annotated[Optional[str], form_field("P_12")]] = Field(None, min_length=1, max_length=65)
     nr_domu: Optional[Annotated[str, form_field("P_13")]] = Field(None, min_length=1, max_length=9)
     nr_lokalu: Optional[Annotated[Optional[str], form_field("P_14")]] = Field(None, min_length=1, max_length=10)
@@ -509,7 +522,7 @@ class PartialAdres(OptionalModel):
         return v
 
 
-class PartialOsobaFizyczna(OptionalModel):
+class PartialOsobaFizyczna(ErrorSuppressingModel):
     nip: Optional[Annotated[Optional[str], form_field("P_17")]] = None
     pesel: Optional[Annotated[Optional[str], form_field("P_18")]] = None
     imie_pierwsze: Optional[Annotated[str, form_field("P_19")]] = Field(None, min_length=1, max_length=30)
@@ -531,7 +544,7 @@ class PartialOsobaFizyczna(OptionalModel):
         return v
 
 
-class PartialOsobaNiefizyczna(OptionalModel):
+class PartialOsobaNiefizyczna(ErrorSuppressingModel):
     nip: Optional[Annotated[str, form_field("P_24")]] = None
     pelna_nazwa: Optional[Annotated[str, form_field("P_25")]] = Field(None, min_length=1, max_length=240)
     skrocona_nazwa: Optional[Annotated[str, form_field("P_26")]] = Field(None, min_length=1, max_length=70)
@@ -543,32 +556,33 @@ class PartialOsobaNiefizyczna(OptionalModel):
         return v
 
 
-class PartialSectionB(OptionalModel):
+class PartialSectionB(ErrorSuppressingModel):
     """Sekcja B: Dane podatnika"""
     osoba_fizyczna: Optional[PartialOsobaFizyczna] = None
     osoba_niefizyczna: Optional[PartialOsobaNiefizyczna] = None
     adres_zamieszkania_siedziby: Optional[PartialAdres] = None
     podmiot_skladajacy: Optional[Annotated[PodmiotSkladajacy, form_field("P_7")]] = None
+    is_complete: Optional[bool]
 
 
-class PartialSectionC(OptionalModel):
+class PartialSectionC(ErrorSuppressingModel):
     """Sekcja C: Przedmiot opodatkowania i treść czynności cywilnoprawnej"""
     przedmiot_opodatkowania: Optional[Annotated[PrzedmiotOpodatkowania, form_field("P_20")]] = None
     miejsce_polozenia: Optional[Annotated[Optional[MiejscePolozenia], form_field("P_21")]] = None
     miejsce_dokonania_czynnosci: Optional[Annotated[Optional[MiejscePolozenia], form_field("P_22")]] = None
     tresc_czynnosci: Optional[Annotated[constr(max_length=2000), form_field("P_23")]] = None
+    is_complete: Optional[bool]
 
 
-class PartialSectionD(OptionalModel):
+class PartialSectionD(ErrorSuppressingModel):
     """Sekcja D: Obliczenie należnego podatku od czynności cywilnoprawnych, z wyjątkiem umowy spółki lub jej zmiany"""
-    podstawa_opodatkowania_1: Optional[Annotated[Optional[int], form_field("P_24")]] = Field(None, ge=0)
-    kwota_podatku_1: Optional[Annotated[Optional[int], form_field("P_25")]] = Field(None, ge=0)
-    podstawa_opodatkowania_2: Optional[Annotated[Optional[int], form_field("P_26")]] = Field(None, ge=0)
-    kwota_podatku_2: Optional[Annotated[Optional[int], form_field("P_27")]] = Field(None, ge=0)
+    podstawa_opodatkowania: Optional[Annotated[Optional[int], form_field("P_26")]] = Field(None, ge=0)
+    kwota_podatku: Optional[Annotated[Optional[int], form_field("P_27")]] = Field(None, ge=0)
     kwota_podatku_naleznego: Optional[Annotated[Optional[int], form_field("P_46")]] = Field(None, ge=0)
+    is_complete: Optional[bool]
 
 
-class PartialSectionE(OptionalModel):
+class PartialSectionE(ErrorSuppressingModel):
     """Sekcja E: Obliczenie należnego podatku od umowy spółki / zmiany umowy spółki"""
     typ_spolki: Optional[Annotated[Optional[TypSpolki], form_field("P_47")]] = None
     podstawa_opodatkowania: Optional[Annotated[Optional[PodstawaOpodatkowania], form_field("P_48")]] = None
@@ -576,14 +590,16 @@ class PartialSectionE(OptionalModel):
     koszty: Optional[Annotated[Optional[float], form_field("P_50")]] = Field(None, ge=0)
     podstawa_obliczenia_podatku: Optional[Annotated[Optional[float], form_field("P_51")]] = Field(None, ge=0)
     kwota_podatku: Optional[Annotated[Optional[int], form_field("P_52")]] = Field(None, ge=0)
+    is_complete: Optional[bool]
 
 
-class PartialSectionF(OptionalModel):
+class PartialSectionF(ErrorSuppressingModel):
     """Sekcja F: Podatek do zapłaty"""
     kwota_podatku_do_zaplaty: Optional[Annotated[int, form_field("P_53")]] = Field(None, ge=0)
+    is_complete: Optional[bool]
 
 
-class PartialSectionG(OptionalModel):
+class PartialSectionG(ErrorSuppressingModel):
     """Sekcja G: Informacje dodatkowe"""
     wojewodztwo: Optional[Annotated[Optional[str], form_field("P_54")]] = Field(None, min_length=1, max_length=36)
     powiat: Optional[Annotated[Optional[str], form_field("P_55")]] = Field(None, min_length=1, max_length=36)
@@ -593,6 +609,7 @@ class PartialSectionG(OptionalModel):
     nr_lokalu: Optional[Annotated[Optional[str], form_field("P_59")]] = Field(None, min_length=1, max_length=10)
     miejscowosc: Optional[Annotated[Optional[str], form_field("P_60")]] = Field(None, min_length=1, max_length=56)
     kod_pocztowy: Optional[Annotated[Optional[str], form_field("P_61")]] = None
+    is_complete: Optional[bool]
 
     @validator('kod_pocztowy')
     def validate_kod_pocztowy(cls, v):
@@ -601,12 +618,13 @@ class PartialSectionG(OptionalModel):
         return v
 
 
-class PartialSectionH(OptionalModel):
+class PartialSectionH(ErrorSuppressingModel):
     """Sekcja H: Informacja o załącznikach"""
     liczba_zalacznikow: Optional[Annotated[Optional[int], form_field("P_62")]] = Field(None, ge=0)
+    is_complete: Optional[bool]
 
 
-class PartialDeklaracja(OptionalModel):
+class PartialDeklaracja(ErrorSuppressingModel):
     sekcja_a: Optional[PartialSectionA] = None
     sekcja_b: Optional[PartialSectionB] = None
     sekcja_c: Optional[PartialSectionC] = None

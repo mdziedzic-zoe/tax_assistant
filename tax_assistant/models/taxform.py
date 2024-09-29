@@ -6,6 +6,7 @@ from datetime import date
 from enum import Enum
 import re
 
+from tax_assistant.models.gminy import Municipality, Voivodeship, County
 from tax_assistant.models.partial_taxform import TaxOffice
 
 
@@ -30,42 +31,49 @@ def form_field(form_field_number: str):
     def decorator(field: Field):
         field.json_schema_extra = {"form_field_number": form_field_number}
         return field
+
     return decorator
 
+
 class CelZlozenia(Enum):
-    ZLOZENIE = 1
-    KOREKTA = 2
+    ZLOZENIE = "ZLOZENIE"
+    KOREKTA = "KOREKTA"
+
 
 class PodmiotSkladajacy(Enum):
-    PODMIOT_ZOBOWIAZANY = 1
-    STRONA_UMOWY_ZAMIANY = 2
-    WSPOLNIK_SPOLKI_CYWILNEJ = 3
-    POZYCZKOBIORCA = 4
-    INNY_PODMIOT = 5
+    PODMIOT_ZOBOWIAZANY = "PODMIOT_ZOBOWIAZANY"
+    STRONA_UMOWY_ZAMIANY = "STRONA_UMOWY_ZAMIANY"
+    WSPOLNIK_SPOLKI_CYWILNEJ = "WSPOLNIK_SPOLKI_CYWILNEJ"
+    POZYCZKOBIORCA = "POZYCZKOBIORCA"
+    INNY_PODMIOT = "INNY_PODMIOT"
+
 
 class PrzedmiotOpodatkowania(Enum):
-    UMOWA = 1
-    ZMIANA_UMOWY = 2
-    ORZECZENIE_SADU_LUB_UGODA = 3
-    INNE = 4
+    UMOWA = "UMOWA"
+    ZMIANA_UMOWY = "ZMIANA_UMOWY"
+    ORZECZENIE_SADU_LUB_UGODA = "ORZECZENIE_SADU_LUB_UGODA"
+    INNE = "INNE"
+
 
 class MiejscePolozenia(Enum):
-    TERYTORIUM_RP = 1
-    POZA_TERYTORIUM_RP = 2
+    TERYTORIUM_RP = "TERYTORIUM_RP"
+    POZA_TERYTORIUM_RP = "POZA_TERYTORIUM_RP"
+
 
 class TypSpolki(Enum):
-    OSOBOWA = 1
-    KAPITALOWA = 2
+    OSOBOWA = "OSOBOWA"
+    KAPITALOWA = "KAPITALOWA"
+
 
 class PodstawaOpodatkowania(Enum):
-    ZAWARCIE_UMOWY_SPOLKI = 1
-    ZWIEKSZENIE_MAJATKU_SPOLKI = 2
-    DOPLATA = 3
-    POZYCZKA_UDZIELONA_SPOLCE = 4
-    ODDANIE_RZECZY_DO_UZYWANIA = 5
-    PRZEKSZTALCENIE_SPOLEK = 6
-    LACZENIE_SPOLEK = 7
-    PRZENIESIENIE_SIEDZIBY = 8
+    ZAWARCIE_UMOWY_SPOLKI = "ZAWARCIE_UMOWY_SPOLKI"
+    ZWIEKSZENIE_MAJATKU_SPOLKI = "ZWIEKSZENIE_MAJATKU_SPOLKI"
+    DOPLATA = "DOPLATA"
+    POZYCZKA_UDZIELONA_SPOLCE = "POZYCZKA_UDZIELONA_SPOLCE"
+    ODDANIE_RZECZY_DO_UZYWANIA = "ODDANIE_RZECZY_DO_UZYWANIA"
+    PRZEKSZTALCENIE_SPOLEK = "PRZEKSZTALCENIE_SPOLEK"
+    LACZENIE_SPOLEK = "LACZENIE_SPOLEK"
+    PRZENIESIENIE_SIEDZIBY = "PRZENIESIENIE_SIEDZIBY"
 
 
 class SectionA(OptionalModel):
@@ -74,7 +82,8 @@ class SectionA(OptionalModel):
     wariant_formularza: Literal[6] = 6
     cel_zlozenia: Annotated[CelZlozenia, form_field("P_6")]
     data_dokonania_czynnosci: Annotated[date, form_field("P_4")]
-    kod_urzedu: Annotated[TaxOffice, form_field("P_5")]
+    nazwa_urzedu: Annotated[TaxOffice, form_field("P_5")]
+    is_complete: Optional[bool]
 
     @validator('data_dokonania_czynnosci')
     def validate_date(cls, v):
@@ -82,11 +91,12 @@ class SectionA(OptionalModel):
             raise ValueError('Data musi być nie wcześniejsza niż 1 stycznia 2024')
         return v
 
+
 class Adres(OptionalModel):
-    kod_kraju: Annotated[str, form_field("P_8")]
-    wojewodztwo: Annotated[Optional[str], form_field("P_9")] = Field(None, min_length=1, max_length=36)
-    powiat: Annotated[Optional[str], form_field("P_10")] = Field(None, min_length=1, max_length=36)
-    gmina: Annotated[Optional[str], form_field("P_11")] = Field(None, min_length=1, max_length=36)
+    kod_kraju: Literal["POLSKA"] = "POLSKA"
+    wojewodztwo: Annotated[Optional[Voivodeship], form_field("P_9")] = Field(None, min_length=1, max_length=36)
+    powiat: Annotated[Optional[County], form_field("P_10")] = Field(None, min_length=1, max_length=36)
+    gmina: Annotated[Optional[Municipality], form_field("P_11")] = Field(None, min_length=1, max_length=36)
     ulica: Annotated[Optional[str], form_field("P_12")] = Field(None, min_length=1, max_length=65)
     nr_domu: Annotated[str, form_field("P_13")] = Field(..., min_length=1, max_length=9)
     nr_lokalu: Annotated[Optional[str], form_field("P_14")] = Field(None, min_length=1, max_length=10)
@@ -98,6 +108,7 @@ class Adres(OptionalModel):
         if v is not None and not re.match(r'^\d{2}-\d{3}$', v):
             raise ValueError('Nieprawidłowy format kodu pocztowego')
         return v
+
 
 class OsobaFizyczna(OptionalModel):
     nip: Annotated[Optional[str], form_field("P_17")] = None
@@ -120,6 +131,7 @@ class OsobaFizyczna(OptionalModel):
             raise ValueError('Nieprawidłowy format PESEL')
         return v
 
+
 class OsobaNiefizyczna(OptionalModel):
     nip: Annotated[str, form_field("P_24")]
     pelna_nazwa: Annotated[str, form_field("P_25")] = Field(..., min_length=1, max_length=240)
@@ -131,12 +143,15 @@ class OsobaNiefizyczna(OptionalModel):
             raise ValueError('Nieprawidłowy format NIP')
         return v
 
+
 class SectionB(OptionalModel):
     """Sekcja B: Dane podatnika"""
     osoba_fizyczna: Optional[OsobaFizyczna] = None
     osoba_niefizyczna: Optional[OsobaNiefizyczna] = None
     adres_zamieszkania_siedziby: Adres
     podmiot_skladajacy: Annotated[PodmiotSkladajacy, form_field("P_7")]
+    is_complete: Optional[bool]
+
 
 class SectionC(OptionalModel):
     """Sekcja C: Przedmiot opodatkowania i treść czynności cywilnoprawnej"""
@@ -144,14 +159,16 @@ class SectionC(OptionalModel):
     miejsce_polozenia: Annotated[Optional[MiejscePolozenia], form_field("P_21")] = None
     miejsce_dokonania_czynnosci: Annotated[Optional[MiejscePolozenia], form_field("P_22")] = None
     tresc_czynnosci: Annotated[constr(max_length=2000), form_field("P_23")]
+    is_complete: Optional[bool]
+
 
 class SectionD(OptionalModel):
     """Sekcja D: Obliczenie należnego podatku od czynności cywilnoprawnych, z wyjątkiem umowy spółki lub jej zmiany"""
-    podstawa_opodatkowania_1: Annotated[Optional[int], form_field("P_24")] = Field(None, ge=0)
-    kwota_podatku_1: Annotated[Optional[int], form_field("P_25")] = Field(None, ge=0)
-    podstawa_opodatkowania_2: Annotated[Optional[int], form_field("P_26")] = Field(None, ge=0)
-    kwota_podatku_2: Annotated[Optional[int], form_field("P_27")] = Field(None, ge=0)
+    podstawa_opodatkowania: Annotated[Optional[int], form_field("P_26")] = Field(None, ge=0)
+    kwota_podatku: Annotated[Optional[int], form_field("P_27")] = Field(None, ge=0)
     kwota_podatku_naleznego: Annotated[Optional[int], form_field("P_46")] = Field(None, ge=0)
+    is_complete: Optional[bool]
+
 
 class SectionE(OptionalModel):
     """Sekcja E: Obliczenie należnego podatku od umowy spółki / zmiany umowy spółki"""
@@ -161,10 +178,14 @@ class SectionE(OptionalModel):
     koszty: Annotated[Optional[float], form_field("P_50")] = Field(None, ge=0)
     podstawa_obliczenia_podatku: Annotated[Optional[float], form_field("P_51")] = Field(None, ge=0)
     kwota_podatku: Annotated[Optional[int], form_field("P_52")] = Field(None, ge=0)
+    is_complete: Optional[bool]
+
 
 class SectionF(OptionalModel):
     """Sekcja F: Podatek do zapłaty"""
     kwota_podatku_do_zaplaty: Annotated[int, form_field("P_53")] = Field(..., ge=0)
+    is_complete: Optional[bool]
+
 
 class SectionG(OptionalModel):
     """Sekcja G: Informacje dodatkowe"""
@@ -176,6 +197,7 @@ class SectionG(OptionalModel):
     nr_lokalu: Annotated[Optional[str], form_field("P_59")] = Field(None, min_length=1, max_length=10)
     miejscowosc: Annotated[Optional[str], form_field("P_60")] = Field(None, min_length=1, max_length=56)
     kod_pocztowy: Annotated[Optional[str], form_field("P_61")] = None
+    is_complete: Optional[bool]
 
     @validator('kod_pocztowy')
     def validate_kod_pocztowy(cls, v):
@@ -183,9 +205,12 @@ class SectionG(OptionalModel):
             raise ValueError('Nieprawidłowy format kodu pocztowego')
         return v
 
+
 class SectionH(OptionalModel):
     """Sekcja H: Informacja o załącznikach"""
     liczba_zalacznikow: Annotated[Optional[int], form_field("P_62")] = Field(None, ge=0)
+    is_complete: Optional[bool]
+
 
 class Deklaracja(OptionalModel):
     sekcja_a: SectionA
@@ -197,6 +222,7 @@ class Deklaracja(OptionalModel):
     sekcja_g: Optional[SectionG] = None
     sekcja_h: Optional[SectionH] = None
     pouczenia: int = Literal[1]
+
 
 # Komentarz główny
 """

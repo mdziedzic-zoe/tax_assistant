@@ -1,6 +1,8 @@
 import logging
 import os
 import uuid
+from dataclasses import replace
+from os import system
 from typing import List
 
 import instructor
@@ -13,6 +15,7 @@ from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
 
 from tax_assistant.documents import process_document
+from tax_assistant.models.grounding import brochure, circumstances
 from tax_assistant.models.partial_taxform import PartialDeklaracja
 
 load_dotenv()
@@ -51,273 +54,80 @@ class Response(BaseModel):
 
 def get_system_prompt(current_state):
     return r"""
-        You are an AI assistant specialized in Polish tax forms, particularly the PCC-3 form for civil law transactions tax. Your primary function is to interpret user input and extract relevant information to fill out the PCC-3 form accurately. Respond only in Polish.
-        
-        <KEY-GUIDELINES>
-        1. Extract only explicitly mentioned information from the user's input.
-        2. Never assume or deduce information not directly stated.
-        3. Ensure all extracted data adheres to the validation rules of the PCC-3 form.
-        4. Highlight any validation issues in your response.
-        5. Provide clear, concise responses focused on the user's most recent query.
-        6. Consider the entire conversation history when extracting information.
-        </KEY_GUIDELINES>
-        
-        <TAX_FORMS_DETAILS>
-        Key points about the PCC-3 form:
-        - Used for declaring tax on civil law transactions like sales agreements, property exchanges, loans, etc.
-        - Must be filed within 14 days of the transaction
-        - Submitted to the relevant tax office based on location of property or taxpayer's residence
-        - Can be filed electronically or on paper
-        
-        The form is divided into sections:
-        A. Place and purpose of submission
-        B. Taxpayer information  
-        C. Subject and content of the transaction
-        D. Tax calculation (except for company agreements)
-        E. Tax calculation for company agreements
-        F. Tax to be paid
-        G. Additional information
-        H. Information on attachments
-        I. Taxpayer signature
-        
-        Important details:
-        - The tax base is usually the market value of the property/rights transferred
-        - Different tax rates apply to different types of transactions (e.g. 2% for real estate, 1% for other property rights)
-        - Multiple buyers/sellers may be jointly liable for the tax
-        - Certain transactions like loans between close family members may be tax-exempt
-        
-        When answering questions:
-        - Provide concise, accurate information based on the form guidelines
-        - Clarify if any part of the answer is uncertain
-        - Suggest consulting an accountant or tax advisor for complex situations
-        <TAX_FORMS_DETAILS>
-        
-        <FORM_SPECIFIC_GUIDELINES>
-        - Date format should be DD.MM.YYYY
-        - Ask for an appropriate Tax Office. List ones that are closest to the input. Make sure it belongs to the list supplied in TAX_OFFICES. Use the 6 character mapping provided in TAX_OFFICES.
-        </FORM_SPECIFIC_GUIDELINES>
-        
-        <DATA-MODEL>
-        class CelZlozenia(Enum):
-            ZLOZENIE = 1
-            KOREKTA = 2
-    
-        class PodmiotSkladajacy(Enum):
-            PODMIOT_ZOBOWIAZANY = 1
-            STRONA_UMOWY_ZAMIANY = 2
-            WSPOLNIK_SPOLKI_CYWILNEJ = 3
-            POZYCZKOBIORCA = 4
-            INNY_PODMIOT = 5
-    
-        class PrzedmiotOpodatkowania(Enum):
-            UMOWA = 1
-            ZMIANA_UMOWY = 2
-            ORZECZENIE_SADU_LUB_UGODA = 3
-            INNE = 4
-    
-        class MiejscePolozenia(Enum):
-            TERYTORIUM_RP = 1
-            POZA_TERYTORIUM_RP = 2
-    
-        class TypSpolki(Enum):
-            OSOBOWA = 1
-            KAPITALOWA = 2
-    
-        class PodstawaOpodatkowania(Enum):
-            ZAWARCIE_UMOWY_SPOLKI = 1
-            ZWIEKSZENIE_MAJATKU_SPOLKI = 2
-            DOPLATA = 3
-            POZYCZKA_UDZIELONA_SPOLCE = 4
-            ODDANIE_RZECZY_DO_UZYWANIA = 5
-            PRZEKSZTALCENIE_SPOLEK = 6
-            LACZENIE_SPOLEK = 7
-            PRZENIESIENIE_SIEDZIBY = 8
-    
-    
-        class SectionA(BaseModel):
-            kod_formularza: Literal["PCC-3"] = "PCC-3"
-            wariant_formularza: Literal[6] = 6
-            cel_zlozenia: Annotated[CelZlozenia, form_field("P_6")]
-            data_dokonania_czynnosci: Annotated[date, form_field("P_4")]
-            kod_urzedu: Annotated[TaxOffice, form_field("P_5")]
-    
-            @validator('data_dokonania_czynnosci')
-            def validate_date(cls, v):
-                if v < date(2024, 1, 1):
-                    raise ValueError('Data musi być nie wcześniejsza niż 1 stycznia 2024')
-                return v
-    
-        class Adres(BaseModel):
-            kod_kraju: Annotated[str, form_field("P_8")]
-            wojewodztwo: Annotated[Optional[str], form_field("P_9")] = Field(None, min_length=1, max_length=36)
-            powiat: Annotated[Optional[str], form_field("P_10")] = Field(None, min_length=1, max_length=36)
-            gmina: Annotated[Optional[str], form_field("P_11")] = Field(None, min_length=1, max_length=36)
-            ulica: Annotated[Optional[str], form_field("P_12")] = Field(None, min_length=1, max_length=65)
-            nr_domu: Annotated[str, form_field("P_13")] = Field(..., min_length=1, max_length=9)
-            nr_lokalu: Annotated[Optional[str], form_field("P_14")] = Field(None, min_length=1, max_length=10)
-            miejscowosc: Annotated[str, form_field("P_15")] = Field(..., min_length=1, max_length=56)
-            kod_pocztowy: Annotated[Optional[str], form_field("P_16")] = None
-    
-            @validator('kod_pocztowy')
-            def validate_kod_pocztowy(cls, v):
-                if v is not None and not re.match(r'^\d\{2}-\d\{3}$', v):
-                    raise ValueError('Nieprawidłowy format kodu pocztowego')
-                return v
-    
-        class OsobaFizyczna(BaseModel):
-            nip: Annotated[Optional[str], form_field("P_17")] = None
-            pesel: Annotated[Optional[str], form_field("P_18")] = None
-            imie_pierwsze: Annotated[str, form_field("P_19")] = Field(..., min_length=1, max_length=30)
-            nazwisko: Annotated[str, form_field("P_20")] = Field(..., min_length=1, max_length=81)
-            data_urodzenia: Annotated[date, form_field("P_21")]
-            imie_ojca: Annotated[Optional[str], form_field("P_22")] = Field(None, min_length=1, max_length=30)
-            imie_matki: Annotated[Optional[str], form_field("P_23")] = Field(None, min_length=1, max_length=30)
-    
-            @validator('nip')
-            def validate_nip(cls, v):
-                if v is not None and not re.match(r'^\d\{10}$', v):
-                    raise ValueError('Nieprawidłowy format NIP')
-                return v
-    
-            @validator('pesel')
-            def validate_pesel(cls, v):
-                if v is not None and not re.match(r'^\d\{11}$', v):
-                    raise ValueError('Nieprawidłowy format PESEL')
-                return v
-    
-        class OsobaNiefizyczna(BaseModel):
-            nip: Annotated[str, form_field("P_24")]
-            pelna_nazwa: Annotated[str, form_field("P_25")] = Field(..., min_length=1, max_length=240)
-            skrocona_nazwa: Annotated[str, form_field("P_26")] = Field(..., min_length=1, max_length=70)
-    
-            @validator('nip')
-            def validate_nip(cls, v):
-                if not re.match(r'^\d\{10}$', v):
-                    raise ValueError('Nieprawidłowy format NIP')
-                return v
-    
-        class SectionB(BaseModel):
-            osoba_fizyczna: Optional[OsobaFizyczna] = None
-            osoba_niefizyczna: Optional[OsobaNiefizyczna] = None
-            adres_zamieszkania_siedziby: Adres
-            podmiot_skladajacy: Annotated[PodmiotSkladajacy, form_field("P_7")]
-    
-        class SectionC(BaseModel):
-            przedmiot_opodatkowania: Annotated[PrzedmiotOpodatkowania, form_field("P_20")]
-            miejsce_polozenia: Annotated[Optional[MiejscePolozenia], form_field("P_21")] = None
-            miejsce_dokonania_czynnosci: Annotated[Optional[MiejscePolozenia], form_field("P_22")] = None
-            tresc_czynnosci: Annotated[constr(max_length=2000), form_field("P_23")]
-    
-        class SectionD(BaseModel):
-            podstawa_opodatkowania_1: Annotated[Optional[int], form_field("P_24")] = Field(None, ge=0)
-            kwota_podatku_1: Annotated[Optional[int], form_field("P_25")] = Field(None, ge=0)
-            podstawa_opodatkowania_2: Annotated[Optional[int], form_field("P_26")] = Field(None, ge=0)
-            kwota_podatku_2: Annotated[Optional[int], form_field("P_27")] = Field(None, ge=0)
-            podstawa_opodatkowania_zamiana: Annotated[Optional[int], form_field("P_28")] = Field(None, ge=0)
-            stawka_podatku_zamiana: Annotated[Optional[int], form_field("P_29")] = Field(None, ge=0, le=100)
-            kwota_podatku_zamiana: Annotated[Optional[int], form_field("P_30")] = Field(None, ge=0)
-            podstawa_opodatkowania_pozyczka: Annotated[Optional[int], form_field("P_31")] = Field(None, ge=0)
-            stawka_podatku_pozyczka: Annotated[Optional[float], form_field("P_32")] = Field(None, ge=0, le=100)
-            kwota_podatku_pozyczka: Annotated[Optional[int], form_field("P_33")] = Field(None, ge=0)
-            podstawa_opodatkowania_darowizna: Annotated[Optional[int], form_field("P_34")] = Field(None, ge=0)
-            stawka_podatku_darowizna: Annotated[Optional[int], form_field("P_35")] = Field(None, ge=0, le=100)
-            kwota_podatku_darowizna: Annotated[Optional[int], form_field("P_36")] = Field(None, ge=0)
-            podstawa_opodatkowania_uzytkowanie: Annotated[Optional[int], form_field("P_37")] = Field(None, ge=0)
-            stawka_podatku_uzytkowanie: Annotated[Optional[int], form_field("P_38")] = Field(None, ge=0, le=100)
-            kwota_podatku_uzytkowanie: Annotated[Optional[int], form_field("P_39")] = Field(None, ge=0)
-            podstawa_opodatkowania_hipoteka: Annotated[Optional[int], form_field("P_40")] = Field(None, ge=0)
-            kwota_podatku_hipoteka: Annotated[Optional[int], form_field("P_41")] = Field(None, ge=0)
-            kwota_podatku_hipoteka_nieustalona: Annotated[Optional[int], form_field("P_42")] = Field(None, ge=0)
-            rodzaj_czynnosci_innej: Annotated[Optional[str], form_field("P_43A")] = None
-            podstawa_opodatkowania_inna: Annotated[Optional[int], form_field("P_43")] = Field(None, ge=0)
-            stawka_podatku_inna: Annotated[Optional[int], form_field("P_44")] = Field(None, ge=0, le=100)
-            kwota_podatku_inna: Annotated[Optional[int], form_field("P_45")] = Field(None, ge=0)
-            kwota_podatku_naleznego: Annotated[Optional[int], form_field("P_46")] = Field(None, ge=0)
-    
-        class SectionE(BaseModel):
-            typ_spolki: Annotated[Optional[TypSpolki], form_field("P_47")] = None
-            podstawa_opodatkowania: Annotated[Optional[PodstawaOpodatkowania], form_field("P_48")] = None
-            kwota_podstawy_opodatkowania: Annotated[Optional[int], form_field("P_49")] = Field(None, ge=0)
-            koszty: Annotated[Optional[float], form_field("P_50")] = Field(None, ge=0)
-            podstawa_obliczenia_podatku: Annotated[Optional[float], form_field("P_51")] = Field(None, ge=0)
-            kwota_podatku: Annotated[Optional[int], form_field("P_52")] = Field(None, ge=0)
-    
-        class SectionF(BaseModel):
-            kwota_podatku_do_zaplaty: Annotated[int, form_field("P_53")] = Field(..., ge=0)
-    
-        class SectionG(BaseModel):
-            wojewodztwo: Annotated[Optional[str], form_field("P_54")] = Field(None, min_length=1, max_length=36)
-            powiat: Annotated[Optional[str], form_field("P_55")] = Field(None, min_length=1, max_length=36)
-            gmina: Annotated[Optional[str], form_field("P_56")] = Field(None, min_length=1, max_length=36)
-            ulica: Annotated[Optional[str], form_field("P_57")] = Field(None, min_length=1, max_length=65)
-            nr_domu: Annotated[Optional[str], form_field("P_58")] = Field(None, min_length=1, max_length=9)
-            nr_lokalu: Annotated[Optional[str], form_field("P_59")] = Field(None, min_length=1, max_length=10)
-            miejscowosc: Annotated[Optional[str], form_field("P_60")] = Field(None, min_length=1, max_length=56)
-            kod_pocztowy: Annotated[Optional[str], form_field("P_61")] = None
-    
-            @validator('kod_pocztowy')
-            def validate_kod_pocztowy(cls, v):
-                if v is not None and not re.match(r'^\d\{2}-\d\{3}$', v):
-                    raise ValueError('Nieprawidłowy format kodu pocztowego')
-                return v
-    
-        class SectionH(BaseModel):
-            liczba_zalacznikow: Annotated[Optional[int], form_field("P_62")] = Field(None, ge=0)
-    
-        class Deklaracja(BaseModel):
-            sekcja_a: SectionA
-            sekcja_b: SectionB
-            sekcja_c: SectionC
-            sekcja_d: SectionD
-            sekcja_e: SectionE
-            sekcja_f: SectionF
-            sekcja_g: Optional[SectionG] = None
-            sekcja_h: Optional[SectionH] = None
-            pouczenia: int = Literal[1]
-    
-        # Komentarz główny
-        #Ten model Pydantic reprezentuje strukturę deklaracji PCC-3 (Podatek od czynności cywilnoprawnych).
-        #Model został podzielony na sekcje odpowiadające głównym częściom formularza:
-        #A. Nagłówek deklaracji
-        #B. Dane podatnika
-        #C. Przedmiot opodatkowania i treść czynności cywilnoprawnej
-        #D. Obliczenie należnego podatku od czynności cywilnoprawnych, z wyjątkiem umowy spółki lub jej zmiany
-        #E. Obliczenie należnego podatku od umowy spółki / zmiany umowy spółki
-        #F. Podatek do zapłaty
-        #G. Informacje dodatkowe
-        #H. Informacja o załącznikach
-        #
-        #Każda sekcja jest reprezentowana przez osobną klasę, co ułatwia organizację i zrozumienie struktury formularza.
-        #Dodatkowo, każde pole zawiera informację o numerze odpowiadającego mu pola w formularzu PCC-3.
-        #
-        #Model zawiera również walidacje zgodne z regułami określonymi w schemacie XSD, 
-        #w tym ograniczenia dotyczące długości pól tekstowych, formatów danych (np. NIP, PESEL, kod pocztowy) 
-        #oraz zakresów wartości liczbowych.
-        #
-        #Użyto dekoratora form_field do przechowywania numeru pola formularza dla każdego pola,
-        #co jest zgodne z Pydantic v2 i pozwala na dodanie niestandardowych metadanych do pól.
-        </DATA_MODEL>
-        
-        <CURRENT_STATE>
-        {current_state}
-        </CURRENT_STATE>
-        
-        
+You are an AI assistant specialized in Polish tax forms, particularly the PCC-3 form for civil law transactions tax. Your primary function is to interpret user input and extract relevant information to fill out the PCC-3 form accurately. Respond only in Polish.
 
-        <TASKS>
-        1. Analyze the user's latest query and previous conversation.
-        2. Extract all relevant information that fits the PCC-3 form structure.
-        3. Validate the extracted data against the form's requirements.
-        4. Respond with the most pertinent information related to the user's query.
-        5. If any data doesn't meet validation criteria, explain the issue clearly.
-        6. Provide guidance on correctly filling out the form when appropriate.
-        7. Be explicit about errors provided by the users.
-        </TASKS>
-        
-        <CRUCIAL_REMINDERS>
-        Remember: Accuracy is crucial. Only include information explicitly provided by the user.
-        <CRUCIAL_REMINDERS>
-        """.replace("{current_state}", current_state)
+<KEY-GUIDELINES>
+- Extract only explicitly mentioned information from the user's input.
+- Never assume or deduce information not directly stated.
+- Ensure all extracted data adheres to the validation rules of the PCC-3 form.
+- Highlight any validation issues in your response.
+- Provide clear, concise responses focused on the user's most recent query.
+- Consider the entire conversation history when extracting information.
+- data_dokonania_czynnosci must be only set if the user mentions this.
+- Ask user to verify the amount of podstawa_opodatkowania that you have found.
+- Today is 29 Sep 2024, compute all relative dates e.g. yesterday relative to 29 Sep 2024.
+- Always refer to CURRENT_STATE when deciding what to ask for next. Evaluate whether missing data requires additional prompting.
+- Date format should be DD.MM.YYYY
+- Ask for an appropriate Tax Office. List ones that are closest to the input. Make sure it belongs to the list supplied in TAX_OFFICES. Use the 6 character mapping provided in TAX_OFFICES.
+</KEY_GUIDELINES>
+
+<TAX_FORMS_DETAILS>
+{brochure}
+<TAX_FORMS_DETAILS>
+<TAX_FORM_CIRCUMSTANCES>
+{circumstances}
+<TAX_FORM_CIRCUMSTANCES>
+
+<CURRENT_STATE>
+{current_state}
+</CURRENT_STATE>
+
+<TASKS>
+1. Analyze the user's latest query and previous conversation.
+2. Extract all relevant information that fits the PCC-3 form structure.
+3. Validate the extracted data against the form's requirements.
+4. Respond with the most pertinent information related to the user's query.
+5. If any data doesn't meet validation criteria, explain the issue clearly.
+6. Provide guidance on correctly filling out the form when appropriate.
+7. Be explicit about errors provided by the users.
+8. Set is_completed field inside each sekcja ONLY if all the required fields for xml generation inside given sekcja are filled!!!
+"
+</TASKS>
+
+<CRUCIAL_REMINDERS>
+1. REMEMBER: Accuracy is crucial. Only include information explicitly provided by the user.
+2. Always end with prompt for filling data that's missing in the data model.
+3. Focus on the total market value of the bought item, summing up all the sums mentioned.
+4. Only set the data if mentioned by the user.
+5. IMPORTANT: Before confirming completion of the form, do a thorough review of missing fields.
+<CRUCIAL_REMINDERS>
+""".replace("{current_state}", current_state).replace("{brochure}", brochure).replace("{circumstances}",
+                                                                                      circumstances)
+
+
+def get_init_system_prompt():
+    return r"""
+You are an AI assistant specialized in Polish tax forms, particularly the PCC-3 form for civil law transactions tax. Respond only in Polish using markdown format. 
+
+<KEY-GUIDELINES>
+- Using the brochure supplied, outline a very specific agenda detailing at least 3 steps. In the steps mention: 
+    - why and who should submit that particular tax form and whether they are applicable.
+    - what are the necessary information
+    - What information has been gathered already 
+- Extract only explicitly mentioned information from the user's input.
+- Never assume or deduce information not directly stated.
+- Ask user to verify the amount of podstawa_opodatkowania that you have found.
+- Today is 29 Sep 2024, compute all relative dates e.g. yesterday relative to 29 Sep 2024. Ask the user for date confirmation.
+- Focus on the total market value of the bought item, summing up all the sums mentioned. There may be more than a single numerical value provided.
+</KEY_GUIDELINES>
+
+IMPORTANT: Before returning with an answer, double check whether all KEY-GUIDELINES have been met. Ensure that the agenda is present and has at least 3 steps which are outlined in the response.
+
+BROCHURE:
+{brochure}
+CIRCUMSTANCES:
+{circumstances}
+""".replace(f"{brochure}", brochure).replace(f"{circumstances}", circumstances)
 
 
 def merge(dict1, dict2):
@@ -333,39 +143,24 @@ def merge(dict1, dict2):
 
 
 db = {}
+messages_db = {}
 
 
 @app.post("/chat")
 async def answer_chat(req: Request):
+    messages_db[req.conv_id] = messages_db.get(req.conv_id, [])
+
+    # different case for initial round
+    if len(messages_db[req.conv_id]) == 0:
+        print("init prompt")
+        system_prompt = get_init_system_prompt()
+    else:
+        system_prompt = get_system_prompt(req.declaration.model_dump_json())
+
+    messages_db[req.conv_id].extend(req.messages)
+
     try:
-        # # Ask gpt-4o-mini to answer with a number of a Urzad Skarbowy from the following list based on the user query. If there's no mention about any Urzad Skarbowy, return None.
-        # urzad_skarbowy_map_text = """
-        #         nazwa - kod_urzedu
-        #         Urzad Skarbowy Warszawa-Centrum - 123
-        #         Urzad Skarbowy Krakow-Nowa Huta - 124
-        #         Urzad Skarbowy Wroclaw-Fabryczna - 125
-        #         Urzad Skarbowy Poznan-Jezyce - 126
-        #         Urzad Skarbowy Gdansk-Polnoc - 127
-        #         """
-        #
-        # # Create a prompt to ask gpt-4o-mini
-        # urzad_skarbowy_prompt = f"""
-        #         Based on the user query, identify the kod_urzedu from the following list:
-        #         {urzad_skarbowy_map_text}
-        #         If there's no mention of any Urzad Skarbowy, return None.
-        #         User query: {req.messages[-1].content}
-        #         """
-        #
-        # urzad_skarbowy_response = client.chat.completions.create(
-        #     model="gpt-4o-mini",
-        #     messages=[{"role": "user", "content": urzad_skarbowy_prompt}]
-        # )
-        #
-        # print(f"Identified Urzad Skarbowy number: {urzad_skarbowy_response}")
-
-        messages = [Message(role="system", content=get_system_prompt(
-            req.declaration.model_dump_json()))] + req.messages
-
+        messages = [Message(role="system", content=system_prompt)] + messages_db[req.conv_id]
 
         be_model = db.get(req.conv_id, {})
         fe_model = req.declaration.model_dump()  # Convert Pydantic model to dict
@@ -378,6 +173,9 @@ async def answer_chat(req: Request):
             response_model=Response
         )
 
+        messages_db[req.conv_id].append(Message(role="assistant", content=response.response))
+
+        print(messages_db[req.conv_id])
         try:
             # Merge and store as dict
             db[req.conv_id] = merge(model, response.declaration.model_dump())
@@ -460,3 +258,28 @@ if __name__ == "__main__":
 
     print("running")
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+# # Ask gpt-4o-mini to answer with a number of a Urzad Skarbowy from the following list based on the user query. If there's no mention about any Urzad Skarbowy, return None.
+# urzad_skarbowy_map_text = """
+#         nazwa - kod_urzedu
+#         Urzad Skarbowy Warszawa-Centrum - 123
+#         Urzad Skarbowy Krakow-Nowa Huta - 124
+#         Urzad Skarbowy Wroclaw-Fabryczna - 125
+#         Urzad Skarbowy Poznan-Jezyce - 126
+#         Urzad Skarbowy Gdansk-Polnoc - 127
+#         """
+#
+# # Create a prompt to ask gpt-4o-mini
+# urzad_skarbowy_prompt = f"""
+#         Based on the user query, identify the kod_urzedu from the following list:
+#         {urzad_skarbowy_map_text}
+#         If there's no mention of any Urzad Skarbowy, return None.
+#         User query: {req.messages[-1].content}
+#         """
+#
+# urzad_skarbowy_response = client.chat.completions.create(
+#     model="gpt-4o-mini",
+#     messages=[{"role": "user", "content": urzad_skarbowy_prompt}]
+# )
+#
+# print(f"Identified Urzad Skarbowy number: {urzad_skarbowy_response}")

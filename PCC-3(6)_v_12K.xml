@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Deklaracja xmlns="http://crd.gov.pl/wzor/2023/12/13/13064/">
+  <Naglowek>
+    <KodFormularza kodSystemowy="PCC-3 (6)" kodPodatku="PCC" rodzajZobowiazania="Z" wersjaSchemy="1-0E">PCC-3</KodFormularza>
+    <WariantFormularza>6</WariantFormularza>
+    <CelZlozenia poz="P_6">1</CelZlozenia>
+    <Data poz="P_4">2024-03-15</Data>
+    <KodUrzedu>1206</KodUrzedu>
+  </Naglowek>
+  <Podmiot1 rola="Podatnik">
+    <OsobaFizyczna>
+      <NIP>5130267603</NIP>
+      <ImiePierwsze>JAN</ImiePierwsze>
+      <Nazwisko>KOWALSKI</Nazwisko>
+      <DataUrodzenia>1980-05-15</DataUrodzenia>
+      <ImieOjca>ADAM</ImieOjca>
+      <ImieMatki>EWA</ImieMatki>
+    </OsobaFizyczna>
+    <AdresZamieszkaniaSiedziby rodzajAdresu="RAD">
+      <AdresPol>
+        <KodKraju>PL</KodKraju>
+        <Wojewodztwo>MAZOWIECKIE</Wojewodztwo>
+        <Powiat>M. ST. WARSZAWA</Powiat>
+        <Gmina>M. ST. WARSZAWA</Gmina>
+        <Ulica>MARSZAŁKOWSKA</Ulica>
+        <NrDomu>1</NrDomu>
+        <NrLokalu>10</NrLokalu>
+        <Miejscowosc>WARSZAWA</Miejscowosc>
+        <KodPocztowy>00-001</KodPocztowy>
+      </AdresPol>
+    </AdresZamieszkaniaSiedziby>
+  </Podmiot1>
+  <PozycjeSzczegolowe>
+    <P_7>1</P_7>
+    <P_20>1</P_20>
+    <P_21>1</P_21>
+    <P_22>1</P_22>
+    <P_23>Zakup nieruchomości</P_23>
+    <P_53>5495</P_53>
+    <P_54>MAZOWIECKIE</P_54>
+    <P_55>M. ST. WARSZAWA</P_55>
+    <P_56>M. ST. WARSZAWA</P_56>
+    <P_57>NOWY ŚWIAT</P_57>
+    <P_58>1</P_58>
+    <P_59>1</P_59>
+    <P_60>WARSZAWA</P_60>
+    <P_61>00-001</P_61>
+    <P_62>1</P_62>
+  </PozycjeSzczegolowe>
+  <Pouczenia>1</Pouczenia>
+</Deklaracja>
