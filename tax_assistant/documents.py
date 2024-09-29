@@ -56,7 +56,7 @@ def analyze_document_with_gpt4(file_path, prompt):
             elif run_status.status == 'failed':
                 logger.error(f"Run failed: {run_status.last_error}")
                 return None
-            time.sleep(5)  # Wait for 5 seconds before checking again
+            time.sleep(1)  # Wait for 1 second before checking again
 
         # Retrieve the messages
         messages = client.beta.threads.messages.list(thread_id=thread.id)
