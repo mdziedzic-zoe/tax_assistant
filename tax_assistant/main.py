@@ -72,6 +72,8 @@ You are an AI assistant specialized in Polish tax forms, particularly the PCC-3 
 - Always refer to CURRENT_STATE when deciding what to ask for next. Evaluate whether missing data requires additional prompting.
 - Date format should be DD.MM.YYYY
 - Ask for an appropriate Tax Office. List ones that are closest to the input. Make sure it belongs to the list supplied in TAX_OFFICES. Use the 6 character mapping provided in TAX_OFFICES.
+- Look for a ten digit number. This will usually be PESEL, which is important!
+- ALWAYS make sure than gmina, powiat and wojewodztwo are not null in section B.
 </KEY_GUIDELINES>
 
 <TAX_FORMS_DETAILS>
@@ -167,13 +169,6 @@ messages_db = {}
 @app.post("/chat")
 async def answer_chat(req: Request):
     messages_db[req.conv_id] = messages_db.get(req.conv_id, [])
-
-    # different case for initial round
-    # if len(messages_db[req.conv_id]) == 0:
-    #     print("init prompt")
-    #     system_prompt = get_init_system_prompt()
-    # else:
-
     system_prompt = get_system_prompt(req.declaration.model_dump_json())
     messages_db[req.conv_id].extend(req.messages)
 
@@ -224,10 +219,10 @@ async def answer_chat(req: Request):
                     response_model=Response
                 )
 
-            return Response(
-                response=response.response,
-                declaration=db[req.conv_id]
-            )
+        return Response(
+            response=response.response,
+            declaration=db[req.conv_id]
+        )
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=e)
@@ -297,7 +292,7 @@ if __name__ == "__main__":
     import uvicorn
 
     print("running")
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=9999)
 
 # # Ask gpt-4o-mini to answer with a number of a Urzad Skarbowy from the following list based on the user query. If there's no mention about any Urzad Skarbowy, return None.
 # urzad_skarbowy_map_text = """
