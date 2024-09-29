@@ -210,21 +210,24 @@ async def answer_chat(req: Request):
                 )
 
             except ValidationError as ve:
-                print(ve)
-                for e in ve.errors():
-                    print(e)
-
+                err_string = {" ".join([str(e.get('msg', str(e))) for e in ve.errors()[:3]])}
+                print(err_string)
+                correction_prompt = f"There are some errors in the provided final configuration. Ask the user to fill in the data to address them. . 1. REMEMBER: Accuracy is crucial. Only include information explicitly provided by the user. Here are the issues: {err_string}",
                 response = client.chat.completions.create(
                     model="gpt-4o",
-                    messages=messages + Message(role="user",
-                                                content=f"There are some errors in the provided final configuration. Ask the user to fill in the data to address them. Here are the issues: {"\n".join(ve.errors()[:3])}"),
+                    messages=messages + [
+                        Message(role="user",
+                                content=correction_prompt,
+                                response_model=Response
+                                )
+                    ],
                     response_model=Response
                 )
 
-        return Response(
-            response=response.response,
-            declaration=db[req.conv_id]
-        )
+            return Response(
+                response=response.response,
+                declaration=db[req.conv_id]
+            )
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=e)
